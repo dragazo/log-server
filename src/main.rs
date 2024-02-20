@@ -5,6 +5,7 @@ use axum::routing::post;
 use axum::extract::State;
 
 use serde::Deserialize;
+use serde_json::Value as JsonValue;
 use tokio::time::sleep;
 use async_std::fs::OpenOptions;
 use async_std::io::{WriteExt, BufWriter};
@@ -17,8 +18,10 @@ const LOG_FLUSH_INTERVAL: Duration = Duration::from_secs(60);
 #[derive(Deserialize)]
 struct LogPayload {
     install_id: String,
+    session_id: String,
+    seq: usize,
     time: String,
-    msg: String,
+    msg: JsonValue,
 }
 enum LogCommand {
     Log(LogPayload),
@@ -34,13 +37,13 @@ async fn main() {
 
     let (log_sender, log_receiver) = channel::unbounded();
     tokio::spawn(async move {
-        let mut log_file = BufWriter::new(OpenOptions::new().append(true).open(LOG_PATH).await.unwrap());
+        let mut log_file = BufWriter::new(OpenOptions::new().create(true).append(true).open(LOG_PATH).await.unwrap());
         let mut flush_delta = 0usize;
 
         while let Ok(command) = log_receiver.recv().await {
             match command {
                 LogCommand::Log(payload) => {
-                    let content = format!("[{}] {} > {:?}\n", payload.time, payload.install_id, payload.msg);
+                    let content = format!("[{}] {}::{}::{} > {}\n", payload.time, payload.install_id, payload.session_id, payload.seq, payload.msg);
                     log_file.write_all(content.as_bytes()).await.unwrap();
                     flush_delta += 1;
                 }
