@@ -27,8 +27,12 @@ enum LogCommand {
     Log(LogPayload),
     Flush,
 }
+
 async fn log(state: State<Sender<LogCommand>>, Json(payload): Json<LogPayload>) {
     state.send(LogCommand::Log(payload)).await.unwrap();
+}
+async fn flush(state: State<Sender<LogCommand>>) {
+    state.send(LogCommand::Flush).await.unwrap();
 }
 
 #[tokio::main]
@@ -64,7 +68,8 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route("/log", post(log).with_state(log_sender.clone()));
+        .route("/log", post(log).with_state(log_sender.clone()))
+        .route("/flush", post(flush).with_state(log_sender.clone()));
 
     let listener = tokio::net::TcpListener::bind(SERVER_ADDR).await.unwrap();
     log::info!("listening at {SERVER_ADDR}");
