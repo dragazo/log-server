@@ -1,0 +1,14 @@
+[package]
+name = "log-server"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.36.0", features = ["full"] }
+env_logger = "0.11.2"
+async-std = "1.12.0"
+axum = "0.7.4"
+log = "0.4.20"
