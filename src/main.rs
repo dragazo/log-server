@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use axum::{Router, Json};
 use axum::routing::post;
-use axum::extract::State;
+use axum::extract::{State, DefaultBodyLimit};
 
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
@@ -69,7 +69,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/log", post(log).with_state(log_sender.clone()))
-        .route("/flush", post(flush).with_state(log_sender.clone()));
+        .route("/flush", post(flush).with_state(log_sender.clone()))
+        .layer(DefaultBodyLimit::max(16 * 1024 * 1024));
 
     let listener = tokio::net::TcpListener::bind(SERVER_ADDR).await.unwrap();
     log::info!("listening at {SERVER_ADDR}");
