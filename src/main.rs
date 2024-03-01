@@ -1,4 +1,5 @@
 use std::time::Duration;
+use std::num::NonZeroU64;
 
 use axum::{Router, Json};
 use axum::routing::post;
@@ -10,10 +11,7 @@ use tokio::time::sleep;
 use async_std::fs::OpenOptions;
 use async_std::io::{WriteExt, BufWriter};
 use async_std::channel::{self, Sender};
-
-const SERVER_ADDR: &str = "0.0.0.0:3498";
-const LOG_PATH: &str = "events.log";
-const LOG_FLUSH_INTERVAL: Duration = Duration::from_secs(60);
+use clap::Parser;
 
 #[derive(Deserialize)]
 struct LogPayload {
@@ -35,13 +33,31 @@ async fn flush(state: State<Sender<LogCommand>>) {
     state.send(LogCommand::Flush).await.unwrap();
 }
 
+/// Host a simple, general-purpose logging server.
+#[derive(Parser)]
+struct Args {
+    /// Path to store the log file.
+    #[arg(short, long, default_value_t = String::from("events.log"))]
+    output: String,
+
+    /// Log flush interval in seconds.
+    #[arg(short, long, default_value_t = NonZeroU64::new(60).unwrap())]
+    flush_interval: NonZeroU64,
+
+    /// Port to use for the logging server.
+    #[arg(short, long, default_value_t = 3498)]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    simple_logger::SimpleLogger::new().with_level(log::LevelFilter::Info).init().unwrap();
+
+    let args = Args::parse();
 
     let (log_sender, log_receiver) = channel::unbounded();
     tokio::spawn(async move {
-        let mut log_file = BufWriter::new(OpenOptions::new().create(true).append(true).open(LOG_PATH).await.unwrap());
+        let mut log_file = BufWriter::new(OpenOptions::new().create(true).append(true).open(&args.output).await.unwrap());
         let mut flush_delta = 0usize;
 
         while let Ok(command) = log_receiver.recv().await {
@@ -61,8 +77,9 @@ async fn main() {
     });
     let log_sender_clone = log_sender.clone();
     tokio::spawn(async move {
+        let t = Duration::from_secs(args.flush_interval.get());
         loop {
-            sleep(LOG_FLUSH_INTERVAL).await;
+            sleep(t).await;
             log_sender_clone.send(LogCommand::Flush).await.unwrap();
         }
     });
@@ -72,7 +89,8 @@ async fn main() {
         .route("/flush", post(flush).with_state(log_sender.clone()))
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024));
 
-    let listener = tokio::net::TcpListener::bind(SERVER_ADDR).await.unwrap();
-    log::info!("listening at {SERVER_ADDR}");
+    let addr = format!("0.0.0.0:{}", args.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    log::info!("listening at {addr} -- flushing every {} seconds", args.flush_interval.get());
     axum::serve(listener, app).await.unwrap();
 }
