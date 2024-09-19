@@ -1,7 +1,8 @@
-from rust:1.81 as build
-copy ./ ./
-run cargo build --release
+FROM rust:latest as build
+WORKDIR /app
+COPY . .
+RUN cargo build --release
 
-from debian:stable-slim
-copy --from=build ./target/release/log-server .
-cmd ["./log-server"]
+FROM debian:stable-slim
+WORKDIR /app
+COPY --from=build /app/target/release/log-server .

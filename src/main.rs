@@ -1,5 +1,5 @@
 use std::time::Duration;
-use std::num::NonZeroU64;
+use std::num::NonZero;
 
 use axum::{Router, Json};
 use axum::routing::post;
@@ -41,8 +41,8 @@ struct Args {
     output: String,
 
     /// Log flush interval in seconds.
-    #[arg(short, long, default_value_t = NonZeroU64::new(60).unwrap())]
-    flush_interval: NonZeroU64,
+    #[arg(short, long, default_value_t = NonZero::new(60).unwrap())]
+    flush_interval: NonZero<u64>,
 
     /// Port to use for the logging server.
     #[arg(short, long, default_value_t = 3498)]
@@ -56,8 +56,9 @@ async fn main() {
     let args = Args::parse();
 
     let (log_sender, log_receiver) = channel::unbounded();
+    let output = args.output.clone();
     tokio::spawn(async move {
-        let mut log_file = BufWriter::new(OpenOptions::new().create(true).append(true).open(&args.output).await.unwrap());
+        let mut log_file = BufWriter::new(OpenOptions::new().create(true).append(true).open(&output).await.unwrap());
         let mut flush_delta = 0usize;
 
         while let Ok(command) = log_receiver.recv().await {
@@ -91,6 +92,6 @@ async fn main() {
 
     let addr = format!("0.0.0.0:{}", args.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    log::info!("listening at {addr} -- flushing every {} seconds", args.flush_interval.get());
+    log::info!("listening at {addr} -- flushing to {} every {} seconds", args.output, args.flush_interval.get());
     axum::serve(listener, app).await.unwrap();
 }
